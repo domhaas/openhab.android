@@ -2,25 +2,16 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
     <PreferenceCategory android:title="@string/settings_connection_title">
         <CheckBoxPreference
-            android:defaultValue="true"
             android:disableDependentsState="true"
             android:key="default_openhab_demomode"
             android:summary="@string/settings_openhab_demomode_summary"
             android:title="@string/settings_openhab_demomode" />
         <EditTextPreference
-            android:defaultValue=""
+            android:defaultValue="https://192.168.10.3:8443"
             android:dependency="default_openhab_demomode"
             android:key="default_openhab_url"
             android:summary="@string/settings_openhab_url_summary"
             android:title="@string/settings_openhab_url"
-            android:inputType="textNoSuggestions"
-            />
-        <EditTextPreference
-            android:defaultValue=""
-            android:dependency="default_openhab_demomode"
-            android:key="default_openhab_alturl"
-            android:summary="@string/settings_openhab_alturl_summary"
-            android:title="@string/settings_openhab_alturl"
             android:inputType="textNoSuggestions"
             />
         <EditTextPreference
@@ -54,7 +45,7 @@
                 android:title="@string/settings_openhab_sslclientcert_howto"
         />
         <CheckBoxPreference
-            android:defaultValue="false"
+            android:defaultValue="true"
             android:key="default_openhab_sslcert"
             android:summary="@string/settings_openhab_sslcert_summary"
             android:title="@string/settings_openhab_sslcert" />
@@ -63,6 +54,14 @@
             android:key="default_openhab_sslhost"
             android:summary="@string/settings_openhab_sslhost_summary"
             android:title="@string/settings_openhab_sslhost" />
+        <EditTextPreference
+            android:defaultValue=""
+            android:dependency="default_openhab_demomode"
+            android:key="default_openhab_alturl"
+            android:summary="@string/settings_openhab_alturl_summary"
+            android:title="@string/settings_openhab_alturl"
+            android:inputType="textNoSuggestions"
+            />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/settings_display_title">
         <ListPreference
@@ -81,6 +80,20 @@
             android:key="default_openhab_fullscreen"
             android:summary="@string/settings_openhab_fullscreen_summary"
             android:title="@string/settings_openhab_fullscreen" />
+    </PreferenceCategory>
+    <PreferenceCategory android:title="API">
+        <CheckBoxPreference
+            android:defaultValue="true"
+            android:key="default_openhab_api_enabled"
+            android:title="@string/settings_openhab_api_enabled" />
+        <EditTextPreference
+            android:defaultValue="5000"
+            android:dependency="default_openhab_api_enabled"
+            android:key="default_openhab_api_port"
+            android:summary="Webservice Port"
+            android:title="@string/settings_openhab_api_port"
+            android:inputType="numberDecimal"
+            />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/settings_misc_title">
         <RingtonePreference
