@@ -4,7 +4,7 @@ This is fork of the OpenHAB Android Client which adds an api for calling command
 
 ## Idea
 I wanted to have some kind of notification if there's something happening inside my home. Also I wanted to turn off the display of my Android Interface when I'm not at home or if I'm sleeping.
-Android got a very nice TTS onboard, without the need of some kind of Cloud TTS crap. So I decided to pimp the (very nice) Android Client of OpenHAB. The good thing in this solution is, that you just need a (cheap) Android Tablet. A rooted device is will give you also abilities like turning off the display.
+Android got a very nice TTS onboard, without the need of some kind of Cloud TTS crap. So I decided to pimp the (very nice) Android Client of OpenHAB. The good thing in this solution is, that you just need a (cheap) Android Tablet. A rooted device will give you also abilities like turning off the display.
 I also tried the OpenHAB2 tts, but I was not really happy, because you need extra software on your OpenHAB-Server which is (I'm using a pi) was not very nice for me.
 Also, I didn't like those extra margins, so I removed them from the client ;)
 
