@@ -1,6 +1,6 @@
 # Introduction
 
-This is fork of the OpenHAB Android Client which adds an api for calling commands on the android device.
+This is a fork of the OpenHAB Android Client which adds an api for calling commands on the android device.
 
 ## Idea
 I wanted to have some kind of notification if there's something happening inside my home. Also I wanted to turn off the display of my Android Interface when I'm not at home or if I'm sleeping.
