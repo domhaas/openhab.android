@@ -37,6 +37,9 @@ This is just a proof of concept I'm currently running within my smarthome. I wil
 - improve reliability: currently the Api is crashing if the Network Connection is lost - this happens sometimes if the android device is losing connection.
 - putting those raw http calls inside an OpenHAB Plugin would be nice.
 
+## Download
+[Test-Release v0.1](https://github.com/domhaas/openhab.android/releases/download/0.1/mobile-debug.apk)
+
 ## Trademark Disclaimer
 
 Product names, logos, brands and other trademarks referred to within the openHAB website are the
