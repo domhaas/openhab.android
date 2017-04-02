@@ -1,26 +1,16 @@
 ## Introduction
 
-openHAB Android application is a native client for openHAB. It uses REST API of openHAB to render
-sitemaps of your openHAB. It also supports my.openhab.org including push notifications.
-Release version of the app is always available for installation through
-[Google Play](https://play.google.com/store/apps/details?id=org.openhab.habdroid)
-Development snapshots are available for download on [CloudBees](https://openhab.ci.cloudbees.com/job/HABDroid/)
+This is fork of the OpenHAB Android Client which adds an api for calling commands on the android device.
+Currently supported api-calls:
+- "/" : check if webservice is running
+- "/display" : get information if display is on/off (return: ON/OFF)
+- "/display/on" : turn on display
+- "/display/off" : turn of display
+- "/notify/sound" : plays the default notification sound
+- "/speak?text=" : take use of the tts
 
-## Setting up development environment
-
-If you want to contribute to Android application we are here to help you to set up
-development environment. openHAB Android app is developed using Android studio and also can be
-build with maven.
-
-- Download and install [Android Studio](http://developer.android.com/sdk/installing/studio.html)
-- After installation launch Android Studio, download and install Android SDK version 4.0.3 (Tools ->
-Android -> SDK Manager)
-- Check out the latest code from github
-- Open the project in Android Studio (File -> Open, select project folder)
-
-You are ready to contribute!
-
-Before producing any amount of code please have a look at [contribution guidelines](https://github.com/openhab/openhab.android/blob/master/CONTRIBUTING.md)
+Some commands may require a rooted devices.
+Tested on (rooted) Shield K1 Tablet.
 
 ## Trademark Disclaimer
 
