@@ -11,6 +11,7 @@ package org.openhab.habdroid.ui;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.Build;
 import android.support.v7.widget.SwitchCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -22,7 +23,6 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebView;
 import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageButton;
@@ -37,11 +37,6 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.VideoView;
 
-import com.loopj.android.http.AsyncHttpClient;
-import com.loopj.android.http.TextHttpResponseHandler;
-
-import cz.msebera.android.httpclient.Header;
-import cz.msebera.android.httpclient.entity.StringEntity;
 import org.openhab.habdroid.R;
 import org.openhab.habdroid.model.OpenHABItem;
 import org.openhab.habdroid.model.OpenHABWidget;
@@ -50,15 +45,20 @@ import org.openhab.habdroid.ui.widget.ColorPickerDialog;
 import org.openhab.habdroid.ui.widget.OnColorChangedListener;
 import org.openhab.habdroid.ui.widget.SegmentedControlButton;
 import org.openhab.habdroid.util.MjpegStreamer;
+import org.openhab.habdroid.util.MyAsyncHttpClient;
+import org.openhab.habdroid.util.MyHttpClient;
 import org.openhab.habdroid.util.MySmartImageView;
 
-import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+
+import okhttp3.Call;
+import okhttp3.Headers;
 
 /**
  * This class provides openHAB widgets adapter for list view.
@@ -89,7 +89,7 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
 	private ArrayList<VideoView> videoWidgetList;
 	private ArrayList<MySmartImageView> refreshImageList;
     private ArrayList<MjpegStreamer> mjpegWidgetList;
-    private AsyncHttpClient mAsyncHttpClient;
+    private MyAsyncHttpClient mAsyncHttpClient;
     private View volumeUpWidget;
     private View volumeDownWidget;
 
@@ -561,7 +561,6 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
     		if (labelTextView != null)
     			labelTextView.setText(openHABWidget.getLabel());
     		final Spinner selectionSpinner = (Spinner)widgetView.findViewById(R.id.selectionspinner);
-			selectionSpinner.setOnItemSelectedListener(null);
     		ArrayList<String> spinnerArray = new ArrayList<String>();
     		Iterator<OpenHABWidgetMapping> mappingIterator = openHABWidget.getMappings().iterator();
     		while (mappingIterator.hasNext()) {
@@ -572,58 +571,47 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
                         spinnerSelectedIndex = spinnerArray.size() - 1;
                     }
     		}
-    		ArrayAdapter<String> spinnerAdapter = new ArrayAdapter<String>(this.getContext() ,
-    				android.R.layout.simple_spinner_item, spinnerArray);
+			ArrayAdapter<String> spinnerAdapter = new SpinnerClickAdapter<String>(this.getContext(),
+				android.R.layout.simple_spinner_item, spinnerArray, openHABWidget, new AdapterView.OnItemClickListener() {
+				@Override
+				public void onItemClick(AdapterView<?> parent, View view, int index, long id) {
+					Log.d(TAG, "Spinner item click on index " + index);
+					String selectedLabel = (String) parent.getAdapter().getItem(index);
+					Log.d(TAG, "Spinner onItemSelected selected label = " + selectedLabel);
+					OpenHABWidget openHABWidget = (OpenHABWidget) parent.getTag();
+					if (openHABWidget != null) {
+						Log.d(TAG, "Label selected = " + openHABWidget.getMapping(index).getLabel());
+						Iterator<OpenHABWidgetMapping> mappingIterator = openHABWidget.getMappings().iterator();
+						while (mappingIterator.hasNext()) {
+							OpenHABWidgetMapping openHABWidgetMapping = mappingIterator.next();
+							if (openHABWidgetMapping.getLabel().equals(selectedLabel)) {
+								Log.d(TAG, "Spinner onItemSelected found match with " + openHABWidgetMapping.getCommand());
+								if (openHABWidget.getItem() != null && openHABWidget.getItem().getState() != null) {
+									sendItemCommand(openHABWidget.getItem(), openHABWidgetMapping.getCommand());
+								} else if (openHABWidget.getItem() != null && openHABWidget.getItem().getState() == null) {
+									Log.d(TAG, "Spinner onItemSelected selected label command and state == null");
+									sendItemCommand(openHABWidget.getItem(), openHABWidgetMapping.getCommand());
+								}
+							}
+						}
+					}
+					// TODO: there's probably a better solution...
+					try {
+						// Close the spinner programmatically
+						Method method = Spinner.class.getDeclaredMethod("onDetachedFromWindow");
+						method.setAccessible(true);
+						method.invoke(selectionSpinner);
+					} catch (Exception ex) {}
+				}
+			});
     		spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
     		selectionSpinner.setAdapter(spinnerAdapter);
-    		selectionSpinner.setTag(openHABWidget);
     		if (spinnerSelectedIndex >= 0) {
 				Log.d(TAG, "Setting spinner selected index to " + String.valueOf(spinnerSelectedIndex));
 				selectionSpinner.setSelection(spinnerSelectedIndex);
 			} else {
 				Log.d(TAG, "Not setting spinner selected index");
 			}
-			selectionSpinner.post(new Runnable() {
-				@Override
-				public void run() {
-					selectionSpinner.setOnItemSelectedListener(new OnItemSelectedListener() {
-						public void onItemSelected(AdapterView<?> parent, View view,
-												   int index, long id) {
-							Log.d(TAG, "Spinner item click on index " + index);
-							Spinner spinner = (Spinner) parent;
-							String selectedLabel = (String) spinner.getAdapter().getItem(index);
-							Log.d(TAG, "Spinner onItemSelected selected label = " + selectedLabel);
-							OpenHABWidget openHABWidget = (OpenHABWidget) parent.getTag();
-							if (openHABWidget != null) {
-								Log.d(TAG, "Label selected = " + openHABWidget.getMapping(index).getLabel());
-								Iterator<OpenHABWidgetMapping> mappingIterator = openHABWidget.getMappings().iterator();
-								while (mappingIterator.hasNext()) {
-									OpenHABWidgetMapping openHABWidgetMapping = mappingIterator.next();
-									if (openHABWidgetMapping.getLabel().equals(selectedLabel)) {
-										Log.d(TAG, "Spinner onItemSelected found match with " + openHABWidgetMapping.getCommand());
-										if (openHABWidget.getItem() != null && openHABWidget.getItem().getState() != null) {
-											// Only send the command for selection of selected command will change the state
-											if (!openHABWidget.getItem().getState().equals(openHABWidgetMapping.getCommand())) {
-												Log.d(TAG, "Spinner onItemSelected selected label command != current item state");
-												sendItemCommand(openHABWidget.getItem(), openHABWidgetMapping.getCommand());
-											}
-										} else if (openHABWidget.getItem() != null && openHABWidget.getItem().getState() == null) {
-											Log.d(TAG, "Spinner onItemSelected selected label command and state == null");
-											sendItemCommand(openHABWidget.getItem(), openHABWidgetMapping.getCommand());
-										}
-									}
-								}
-							}
-//					if (!openHABWidget.getItem().getState().equals(openHABWidget.getMapping(index).getCommand()))
-//						sendItemCommand(openHABWidget.getItem(),
-//								openHABWidget.getMapping(index).getCommand());
-						}
-
-						public void onNothingSelected(AdapterView<?> arg0) {
-						}
-					});
-				}
-			});
     		break;
     	case TYPE_SETPOINT:
     		splitString = openHABWidget.getLabel().split("\\[|\\]");
@@ -768,26 +756,20 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
     }
     
     public void sendItemCommand(OpenHABItem item, String command) {
-        try {
-            if (item != null && command != null) {
-                StringEntity se = new StringEntity(command);
-                mAsyncHttpClient.post(getContext(), item.getLink(), se, "text/plain", new TextHttpResponseHandler() {
-                    @Override
-                    public void onFailure(int statusCode, Header[] headers, String responseString, Throwable error) {
-                        Log.e(TAG, "Got command error " + error.getMessage());
-                        if (responseString != null)
-                            Log.e(TAG, "Error response = " + responseString);
-                    }
+        if (item != null && command != null) {
+            mAsyncHttpClient.post(item.getLink(), command, "text/plain", new MyHttpClient.TextResponseHandler() {
+                @Override
+                public void onFailure(Call call, int statusCode, Headers headers, String responseString, Throwable error) {
+                    Log.e(TAG, "Got command error " + error.getMessage());
+                    if (responseString != null)
+                        Log.e(TAG, "Error response = " + responseString);
+                }
 
-                    @Override
-                    public void onSuccess(int statusCode, Header[] headers, String responseString) {
-                        Log.d(TAG, "Command was sent successfully");
-                    }
-                });
-            }
-        } catch (UnsupportedEncodingException e) {
-            if (e != null)
-            Log.e(TAG, e.getMessage());
+                @Override
+                public void onSuccess(Call call, int statusCode, Headers headers, String responseString) {
+                    Log.d(TAG, "Command was sent successfully");
+                }
+            });
         }
     }
 
@@ -845,8 +827,12 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
             if (sliderItem != null)
                 sendItemCommand(sliderItem, String.valueOf(seekBar.getProgress()));
         } else if (volumeDownWidget instanceof Button) {
-            volumeDownWidget.callOnClick();
-        } else {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
+				volumeDownWidget.callOnClick();
+			} else {
+				volumeDownWidget.performClick();
+			}
+		} else {
             return false;
         }
         return true;
@@ -860,8 +846,12 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
             if (sliderItem != null)
                 sendItemCommand(sliderItem, String.valueOf(seekBar.getProgress()));
         } else if (volumeUpWidget instanceof Button) {
-            volumeUpWidget.callOnClick();
-        } else {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1) {
+				volumeUpWidget.callOnClick();
+			} else {
+				volumeUpWidget.performClick();
+			}
+		} else {
             return false;
         }
         return true;
@@ -875,11 +865,11 @@ public class OpenHABWidgetAdapter extends ArrayAdapter<OpenHABWidget> {
         return volumeUpWidget != null;
     }
 
-    public AsyncHttpClient getAsyncHttpClient() {
+    public MyAsyncHttpClient getAsyncHttpClient() {
         return mAsyncHttpClient;
     }
 
-    public void setAsyncHttpClient(AsyncHttpClient asyncHttpClient) {
+    public void setAsyncHttpClient(MyAsyncHttpClient asyncHttpClient) {
         mAsyncHttpClient = asyncHttpClient;
     }
 

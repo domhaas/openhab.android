@@ -11,7 +11,9 @@ package org.openhab.habdroid.ui;
 
 
 import android.app.Dialog;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v4.app.DialogFragment;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -19,15 +21,15 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-
-import com.loopj.android.http.TextHttpResponseHandler;
-
-import cz.msebera.android.httpclient.Header;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.openhab.habdroid.R;
+import org.openhab.habdroid.util.Constants;
 import org.openhab.habdroid.util.MyAsyncHttpClient;
+import org.openhab.habdroid.util.MyHttpClient;
+
+import okhttp3.Call;
+import okhttp3.Headers;
 
 
 public class OpenHABInfoFragment extends DialogFragment {
@@ -39,6 +41,7 @@ public class OpenHABInfoFragment extends DialogFragment {
     private TextView mOpenHABUUIDText;
     private TextView mOpenHABSecretText;
     private TextView mOpenHABSecretLabel;
+    private TextView mOpenHABNotificationText;
     private String mOpenHABBaseUrl;
     private String mUsername;
     private String mPassword;
@@ -49,12 +52,16 @@ public class OpenHABInfoFragment extends DialogFragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.openhabinfo, container);
-        mAsyncHttpClient = new MyAsyncHttpClient(getActivity().getApplicationContext());
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences
+                (getActivity().getApplicationContext());
+        mAsyncHttpClient = new MyAsyncHttpClient(getActivity().getApplicationContext(), prefs.getBoolean(Constants.PREFERENCE_SSLHOST,
+                false), prefs.getBoolean(Constants.PREFERENCE_SSLCERT, false));
         mOpenHABVersionText = (TextView)view.findViewById(R.id.openhab_version);
         mOpenHABUUIDText = (TextView)view.findViewById(R.id.openhab_uuid);
         mOpenHABSecretText = (TextView)view.findViewById(R.id.openhab_secret);
         mOpenHABSecretLabel = (TextView)view.findViewById(R.id.openhab_secret_label);
         mOpenHABVersionLabel = (TextView)view.findViewById(R.id.openhab_version_label);
+        mOpenHABNotificationText = (TextView)view.findViewById(R.id.openhab_gcm);
         Bundle bundle=getArguments();
 
         if (bundle!=null){
@@ -93,12 +100,13 @@ public class OpenHABInfoFragment extends DialogFragment {
         setVersionText();
         setUuidText();
         setSecretText();
+        setGcmText();
     }
 
     private void setSecretText() {
-        mAsyncHttpClient.get(mOpenHABBaseUrl + "static/secret", new TextHttpResponseHandler() {
+        mAsyncHttpClient.get(mOpenHABBaseUrl + "static/secret", new MyHttpClient.TextResponseHandler() {
             @Override
-            public void onFailure(int statusCode, Header[] headers, String responseString, Throwable error) {
+            public void onFailure(Call call, int statusCode, Headers headers, String responseString, Throwable error) {
                 mOpenHABSecretText.setVisibility(View.GONE);
                 mOpenHABSecretLabel.setVisibility(View.GONE);
                 if (error.getMessage() != null) {
@@ -107,7 +115,7 @@ public class OpenHABInfoFragment extends DialogFragment {
             }
 
             @Override
-            public void onSuccess(int statusCode, Header[] headers, String responseString) {
+            public void onSuccess(Call call, int statusCode, Headers headers, String responseString) {
                 Log.d(TAG, "Got secret = " + responseString);
                 mOpenHABSecretText.setVisibility(View.VISIBLE);
                 mOpenHABSecretLabel.setVisibility(View.VISIBLE);
@@ -123,9 +131,9 @@ public class OpenHABInfoFragment extends DialogFragment {
         } else {
             uuidUrl = mOpenHABBaseUrl + "rest/uuid";
         }
-        mAsyncHttpClient.get(uuidUrl, new TextHttpResponseHandler() {
+        mAsyncHttpClient.get(uuidUrl, new MyHttpClient.TextResponseHandler() {
             @Override
-            public void onFailure(int statusCode, Header[] headers, String responseString, Throwable error) {
+            public void onFailure(Call call, int statusCode, Headers headers, String responseString, Throwable error) {
                 mOpenHABUUIDText.setText("Unknown");
                 if (error.getMessage() != null) {
                     Log.e(TAG, error.getMessage());
@@ -133,7 +141,7 @@ public class OpenHABInfoFragment extends DialogFragment {
             }
 
             @Override
-            public void onSuccess(int statusCode, Header[] headers, String responseString) {
+            public void onSuccess(Call call, int statusCode, Headers headers, String responseString) {
                 Log.d(TAG, "Got uuid = " + responseString);
                 mOpenHABUUIDText.setText(responseString);
             }
@@ -148,9 +156,9 @@ public class OpenHABInfoFragment extends DialogFragment {
             versionUrl = mOpenHABBaseUrl + "rest";
         }
         Log.d(TAG, "url = " + versionUrl);
-        mAsyncHttpClient.get(versionUrl, new TextHttpResponseHandler() {
+        mAsyncHttpClient.get(versionUrl, new MyHttpClient.TextResponseHandler() {
             @Override
-            public void onFailure(int statusCode, Header[] headers, String responseString, Throwable error) {
+            public void onFailure(Call call, int statusCode, Headers headers, String responseString, Throwable error) {
                 mOpenHABVersionText.setText("Unknown");
                 if (error.getMessage() != null) {
                     Log.e(TAG, error.getMessage());
@@ -158,7 +166,7 @@ public class OpenHABInfoFragment extends DialogFragment {
             }
 
             @Override
-            public void onSuccess(int statusCode, Header[] headers, String responseString) {
+            public void onSuccess(Call call, int statusCode, Headers headers, String responseString) {
                 String version="";
                 if(mOpenHABVersion == 1) {
                     version = responseString;
@@ -179,4 +187,16 @@ public class OpenHABInfoFragment extends DialogFragment {
     }
 
 
+    private void setGcmText() {
+        String infoString;
+        if (OpenHABMainActivity.GCM_SENDER_ID == null) {
+            infoString = getString(R.string.info_openhab_gcm_not_connected);
+        } else {
+            infoString = getString(R.string.info_openhab_gcm_connected);
+        }
+
+        mOpenHABNotificationText.setText(
+                String.format(infoString, OpenHABMainActivity.GCM_SENDER_ID)
+        );
+    }
 }

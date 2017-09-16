@@ -10,14 +10,13 @@
 package org.openhab.habdroid.util;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.preference.PreferenceManager;
-import android.support.annotation.NonNull;
-import android.util.Base64;
 import android.util.Log;
 
 import com.caverock.androidsvg.SVG;
@@ -25,25 +24,16 @@ import com.caverock.androidsvg.SVGParseException;
 import com.loopj.android.image.SmartImage;
 import com.loopj.android.image.WebImageCache;
 
-import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Map;
 
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import okhttp3.Call;
+import okhttp3.Headers;
 
 public class MyWebImage implements SmartImage {
+    private static final String TAG = "MyWebImage";
     private static final int CONNECT_TIMEOUT = 5000;
     private static final int READ_TIMEOUT = 10000;
 
@@ -57,9 +47,7 @@ public class MyWebImage implements SmartImage {
     private boolean shouldAuth = false;
 
     public MyWebImage(String url, String username, String password) {
-        this.url = url;
-        this.useCache = true;
-        this.setAuthentication(username, password);
+        this(url, true, username, password);
     }
 
     public MyWebImage(String url, boolean useCache, String username, String password) {
@@ -92,56 +80,53 @@ public class MyWebImage implements SmartImage {
         return bitmap;
     }
 
-    private Bitmap getBitmapFromUrl(Context context, String url, String iconFormat) {
-
-        Bitmap bitmap = null;
-        String encodedUserPassword = null;
-        if (shouldAuth)
-        	try {
-        		String userPassword = this.authUsername + ":" + this.authPassword;
-        		encodedUserPassword = Base64.encodeToString(userPassword.getBytes("UTF-8"), Base64.NO_WRAP);
-        	} catch (UnsupportedEncodingException e1) {
-        		// TODO Auto-generated catch block
-        		e1.printStackTrace();
-        	}
-        if (url.startsWith("https")) {
-        	try {
-        		HttpsURLConnection.setDefaultHostnameVerifier(getHostnameVerifier());
-        		HttpsURLConnection conn = (HttpsURLConnection) new URL(url).openConnection();
-        		conn.setSSLSocketFactory(getSSLSocketFactory(context));
-        		conn.setConnectTimeout(CONNECT_TIMEOUT);
-        		conn.setReadTimeout(READ_TIMEOUT);
-        		if (this.shouldAuth)
-        			conn.setRequestProperty("Authorization", "Basic " + encodedUserPassword);
-                int responseCode = conn.getResponseCode();
-                if (responseCode >= 400) {
-                    throw new Exception("Bad https response status: " + responseCode);
-                }
-                else {
-                    InputStream is = (InputStream) conn.getContent();
-                    bitmap = getBitmapFromInputStream(iconFormat, is);                }
-        	} catch(Exception e) {
-        		e.printStackTrace();
-        	}
-        } else {
-        	try {
-				HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        		conn.setConnectTimeout(CONNECT_TIMEOUT);
-        		conn.setReadTimeout(READ_TIMEOUT);
-        		if (this.shouldAuth)
-        			conn.setRequestProperty("Authorization", "Basic " + encodedUserPassword);
-                int responseCode = conn.getResponseCode();
-                if (responseCode >= 400) {
-                    throw new Exception("Bad http response status: " + responseCode);
-                }
-                else {
-                    InputStream is = (InputStream) conn.getContent();
-                    bitmap = getBitmapFromInputStream(iconFormat, is);                }
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
+    private Bitmap getBitmapFromUrl(Context context, final String url, final String iconFormat) {
+        final Map<String, Object> result = new HashMap<String, Object>();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        MyAsyncHttpClient client = new MyAsyncHttpClient(context, prefs.getBoolean(Constants
+                .PREFERENCE_SSLHOST, false), prefs.getBoolean(Constants.PREFERENCE_SSLCERT, false));
+        client.setTimeout(READ_TIMEOUT);
+        if (shouldAuth) {
+            client.setBasicAuth(authUsername, authPassword);
         }
-        return bitmap;
+
+        client.get(url, new MyHttpClient.ResponseHandler() {
+            @Override
+            public void onFailure(Call call, int statusCode, Headers headers, byte[] responseBody, Throwable error) {
+                Log.e(TAG, "Failed to get " + url + " with code " + statusCode + ":" + error);
+                synchronized (result) {
+                    result.put("error", error);
+                    result.notify();
+                }
+            }
+
+            @Override
+            public void onSuccess(Call call, int statusCode, Headers headers, byte[] responseBody) {
+                InputStream is = new ByteArrayInputStream(responseBody);
+                synchronized (result) {
+                    result.put("bitmap", getBitmapFromInputStream(iconFormat, is));
+                    result.notify();
+                }
+            }
+        });
+
+        synchronized (result) {
+            try {
+                result.wait(60000);
+            } catch (InterruptedException e) {
+                Log.e(TAG, "Timeout fetching " + url);
+                return null;
+            }
+
+            if (result.containsKey("error")) {
+                return null;
+            }
+
+        }
+
+        Log.i(TAG, "fetched bitmap for " + url);
+
+        return (Bitmap)result.get("bitmap");
     }
 
     private Bitmap getBitmapFromInputStream(String iconFormat, InputStream is) {
@@ -158,13 +143,19 @@ public class MyWebImage implements SmartImage {
         Bitmap bitmap = null;
         try {
             SVG svg = SVG.getFromInputStream(is);
-                double width = svg.getDocumentViewBox().width();
-                double height = svg.getDocumentViewBox().height();
+            double width = 16;
+            double height = 16;
+            if (svg.getDocumentViewBox() != null) {
+                width = svg.getDocumentViewBox().width();
+                height = svg.getDocumentViewBox().height();
+            } else {
+                Log.d(TAG, "DocumentViewBox is null. assuming width and heigh of 16px.");
+            }
 
-                bitmap = Bitmap.createBitmap((int) Math.ceil(width), (int) Math.ceil(height), Bitmap.Config.ARGB_8888);
-                Canvas canvas = new Canvas(bitmap);
-                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);//drawARGB(0,0,0,0);//drawRGB(255, 255, 255);
-                svg.renderToCanvas(canvas);
+            bitmap = Bitmap.createBitmap((int) Math.ceil(width), (int) Math.ceil(height), Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);//drawARGB(0,0,0,0);//drawRGB(255, 255, 255);
+            svg.renderToCanvas(canvas);
         } catch (SVGParseException e) {
             e.printStackTrace();
         }
@@ -175,49 +166,6 @@ public class MyWebImage implements SmartImage {
         if(webImageCache != null) {
             webImageCache.remove(url);
         }
-    }
-    
-    public SSLSocketFactory getSSLSocketFactory(Context context) {
-        // Create a trust manager that does not validate certificate chains
-        final TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-            @Override
-            public void checkClientTrusted( final X509Certificate[] chain, final String authType ) {
-            }
-            @Override
-            public void checkServerTrusted( final X509Certificate[] chain, final String authType ) {
-            }
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return null;
-            }
-        } };
-        
-        // Install the all-trusting trust manager
-        SSLContext sslContext;
-		try {
-			sslContext = SSLContext.getInstance( "SSL" );
-	        sslContext.init(MyKeyManager.getInstance(context), trustAllCerts, new java.security.SecureRandom() );
-	        // Create an ssl socket factory with our all-trusting manager
-	        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
-	        return sslSocketFactory;
-		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (KeyManagementException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-		return null;
-    }
-    
-    public HostnameVerifier getHostnameVerifier() {
-        HostnameVerifier allHostsValid = new HostnameVerifier() {
-			@Override
-			public boolean verify(String hostname, SSLSession session) {
-				return true;
-			}
-        };
-        return allHostsValid;
     }
     
     public void setAuthentication(String username, String password) {
